@@ -523,6 +523,7 @@ class RecommendationPanel(QtW.QWidget):
             return out
 
         return {
+            "파운데이션": conv((recos_dict or {}).get("파데")),
             "쿠션":     conv((recos_dict or {}).get("쿠션")),
             "립":       conv((recos_dict or {}).get("립")),
             "아이":     conv((recos_dict or {}).get("아이")),
@@ -564,7 +565,7 @@ class RecommendationPanel(QtW.QWidget):
 
         # CSV recos를 섹션별로
         sections = self._to_sections(recos)
-        order = ["쿠션","립","아이"]
+        order = ["파운데이션", "쿠션", "립", "아이"]
         any_added = False
         for k in order:
             items = sections.get(k) or []
@@ -1115,7 +1116,7 @@ class CaptureUnifiedView(QtW.QWidget):
         for row in items:
             t = row.get("type", "")
             if t in ("파운데이션", "쿠션", "립", "아이"):
-                key = "파데" if t == "파운데이션" else t
+                key = {"파운데이션": "파데", "쿠션": "쿠션", "립": "립", "아이": "아이"}.get(t)
                 recos[key].append({
                     "name": row.get("name",""),
                     "price": row.get("price",""),
@@ -1231,30 +1232,40 @@ class CaptureUnifiedView(QtW.QWidget):
         except Exception:
             want_num = None
 
-        type_to_cat = {"파운데이션":"파데","쿠션":"쿠션","립":"립","아이":"아이"}
-
         # --- 읽기: 인코딩 자동 시도 ---
         with self._open_csv(csv_path) as f:
             r = csv.DictReader(f)
             for row in r:
                 t = (row.get("type") or row.get("category") or "").strip()
-                cat = type_to_cat.get(t)
+
+                # 카테고리 판별 로직 강화 (부분 일치 허용)
+                cat = None
+                if '파운데이션' in t or '파데' in t: cat = '파데'
+                elif '쿠션' in t: cat = '쿠션'
+                elif '립' in t or '틴트' in t or '립스틱' in t: cat = '립'
+                elif '아이' in t or '섀도우' in t: cat = '아이'
+
                 if not cat:
                     continue
 
-                ok = True
-                if want_skin and row.get("skin_types"):
-                    ok &= (row["skin_types"].strip() == str(want_skin).strip())
-                if want_pc and row.get("personal_colors"):
-                    ok &= (row["personal_colors"].strip() == str(want_pc).strip())
-                if want_num is not None and row.get("number"):
-                    try:
-                        row_num = int(float(str(row["number"]).strip()))
-                        ok &= (row_num == int(want_num))
-                    except Exception:
-                        pass
+                # 카테고리별로 필터링 규칙을 다르게 적용
+                is_match = False
+                if cat in ("파데", "쿠션"):  # 베이스 제품: 피부타입과 호수로 필터링
+                    skin_ok = (not want_skin) or (not row.get("skin_types")) or (want_skin in row.get("skin_types", ""))
+                    num_ok = (want_num is None) or (not row.get("number"))
+                    if want_num is not None and row.get("number"):
+                        try:
+                            num_ok = (int(float(row.get("number", "0"))) == want_num)
+                        except (ValueError, TypeError):
+                            num_ok = False
+                    if skin_ok and num_ok:
+                        is_match = True
+                elif cat in ("립", "아이"):  # 색조 제품: 퍼스널컬러로 필터링
+                    pc_ok = (not want_pc) or (not row.get("personal_colors")) or (want_pc in row.get("personal_colors", ""))
+                    if pc_ok:
+                        is_match = True
 
-                if ok:
+                if is_match:
                     recos[cat].append({
                         "name": row.get("name", ""),
                         "price": row.get("price", ""),
