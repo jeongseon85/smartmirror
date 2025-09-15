@@ -1,0 +1,22 @@
+/* 화장품 카운터 느낌의 산뜻한 핑크/코랄 테마 */
+:root {
+  --bg: #fff7fb;
+  --card: #ffffff;
+  --ink: #333333;
+  --sub: #6b6b6b;
+  --accent: #ff6ea8;
+  --accent-2: #ffd6e8;
+  --ok: #5cc9a7;
+  --warn: #ffb84d;
+}
+QWidget { background: var(--bg); color: var(--ink); font-family: 'Pretendard', 'Noto Sans KR', Arial; }
+.QFrame#Card, .QWidget#Card { background: var(--card); border-radius: 20px; border: 1px solid #f1e6ee; }
+QPushButton#Primary {
+  background: qlineargradient(x1:0,y1:0,x2:0,y2:1, stop:0 #ff86b6, stop:1 #ff5f9b);
+  color: white; border: none; border-radius: 24px; padding: 12px 22px; font-size: 18px; font-weight: 600;
+}
+QPushButton#Ghost { background: transparent; border: 1px solid var(--accent); color: var(--accent); border-radius: 24px; padding: 10px 20px; }
+QLabel#H1 { font-size: 28px; font-weight: 800; }
+QLabel#H2 { font-size: 20px; font-weight: 700; color: var(--sub); }
+QLabel#ProductTitle { font-size: 16px; font-weight: 700; }
+QLabel#ProductMeta { font-size: 13px; color: var(--sub); }
