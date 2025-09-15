@@ -1,0 +1,21 @@
+{
+  "created_at": "2025-09-06T07:20:58.233353Z",
+  "note": "Combined bundle of your uploaded files and extracted folders.",
+  "root_files": [
+    "__init__.py",
+    "analysis_worker.py",
+    "color_extract.py",
+    "database.py",
+    "detect_face.py",
+    "main.py",
+    "personal_color.py",
+    "product_analysis_worker.py",
+    "product_ocr.py",
+    "skin_tone_estimator.py",
+    "tone_analysis.py"
+  ],
+  "top_level_dirs": [
+    "ui_pages",
+    "webcam_thread"
+  ]
+}
