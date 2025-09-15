@@ -11,6 +11,38 @@ from PyQt5 import QtWidgets as QtW, QtGui as QtG, QtCore as QtC
 # result_pages에서 중복 정의된 클래스 가져오기
 from .result_pages import ProductDetailDialog, ClickableLabel
 
+class SnappingSlider(QtW.QSlider):
+    """클릭 시 가장 가까운 정수 값으로 이동하는 슬라이더."""
+    def mousePressEvent(self, event: QtG.QMouseEvent):
+        if event.button() == QtC.Qt.LeftButton:
+            opt = QtW.QStyleOptionSlider()
+            self.initStyleOption(opt)
+            handle_rect = self.style().subControlRect(QtW.QStyle.CC_Slider, opt, QtW.QStyle.SC_SliderHandle, self)
+
+            # 핸들이 아닌 슬라이더의 빈 공간(groove)을 클릭했을 때만 동작
+            if not handle_rect.contains(event.pos()):
+                groove_rect = self.style().subControlRect(QtW.QStyle.CC_Slider, opt, QtW.QStyle.SC_SliderGroove, self)
+                if self.orientation() == QtC.Qt.Horizontal:
+                    pos = event.pos().x() - groove_rect.x()
+                    span = groove_rect.width()
+                else:
+                    pos = event.pos().y() - groove_rect.y()
+                    span = groove_rect.height()
+
+                if span > 0:
+                    pos_ratio = pos / span
+                    value_range = self.maximum() - self.minimum()
+
+                    if self.invertedAppearance():
+                        new_value = self.maximum() - (value_range * pos_ratio)
+                    else:
+                        new_value = self.minimum() + (value_range * pos_ratio)
+
+                    self.setValue(round(new_value))
+                    super().mousePressEvent(event)
+                    return
+        super().mousePressEvent(event)
+
 def open_url_external(url):
     QtG.QDesktopServices.openUrl(QtC.QUrl(url or ""))
 
@@ -210,7 +242,8 @@ class SurveyPanel(QtW.QWidget):
         self.setStyleSheet("""
         QWidget#SurveyPanel { background: transparent; }
         QLabel#Guide   { font-size: 22px; font-weight: 600; color: #212529; }
-        QLabel#Sub     { font-size: 15px; color: #6c757d; margin-bottom: 20px; }
+        QLabel#Sub     { font-size: 15px; color: #6c757d; }
+        QLabel#TickLabel { font-size: 13px; color: #868e96; }
         QLabel#Q       { font-size: 16px; font-weight: 500; color: #343a40; }
 
         QSlider::groove:horizontal {
@@ -239,6 +272,9 @@ class SurveyPanel(QtW.QWidget):
             padding-top: 8px;
         }
         QLabel#PreviewResult {
+            /* 참고: 아래 폰트들이 시스템에 설치되어 있어야 적용됩니다. */
+            /* Cafe24 Ssurround, Gmarket Sans 등 귀여운 느낌의 폰트를 우선으로 설정했습니다. */
+            font-family: "Cafe24 Ssurround", "Gmarket Sans", "NanumSquareRound", "Malgun Gothic", sans-serif;
             font-size: 80px; font-weight: 700;
             color: #94B7CF;
             padding-bottom: 8px;
@@ -260,8 +296,13 @@ class SurveyPanel(QtW.QWidget):
 
         guide = QtW.QLabel("피부진단"); guide.setObjectName("Guide")
         sub   = QtW.QLabel("최근 2주 기준 · 1~5로 응답"); sub.setObjectName("Sub")
-        v.addWidget(guide); v.addWidget(sub)
+        scale_guide = QtW.QLabel("1: 전혀 아니다 · 2: 거의 없다 · 3: 가끔 · 4: 자주 · 5: 항상")
+        scale_guide.setObjectName("Sub") # 부제목과 동일한 스타일 적용
+        v.addWidget(guide)
+        v.addWidget(sub)
+        v.addWidget(scale_guide)
 
+        v.addSpacing(20) # 제목과 질문 목록 사이에 여백을 추가합니다.
         # 질문과 질문 사이에 Stretch를 추가하여 패널 높이에 맞게 분산시킵니다.
         v.addStretch(1)
 
@@ -269,12 +310,32 @@ class SurveyPanel(QtW.QWidget):
             qlab = QtW.QLabel(f"{i+1}) {q_text}"); qlab.setObjectName("Q"); qlab.setWordWrap(True)
             v.addWidget(qlab)
 
-            sld = QtW.QSlider(QtC.Qt.Horizontal)
+            # 클릭 시 스냅 기능이 있는 커스텀 슬라이더로 교체
+            sld = SnappingSlider(QtC.Qt.Horizontal)
             sld.setMinimum(1); sld.setMaximum(5); sld.setValue(3)
             sld.setTickInterval(1); sld.setSingleStep(1)
+            sld.setTickPosition(QtW.QSlider.TicksBelow) # 눈금 표시 추가
             sld.valueChanged.connect(self._on_value_changed)
             v.addWidget(sld)
             self.sliders.append(sld)
+
+            # 슬라이더 아래에 숫자 레이블 추가
+            labels_layout = QtW.QHBoxLayout()
+            # 좌우 여백을 줘서 슬라이더 핸들이 끝에 닿았을 때 숫자와 겹치지 않게 합니다.
+            labels_layout.setContentsMargins(10, 0, 10, 0)
+
+            lbl1 = QtW.QLabel("1"); lbl1.setObjectName("TickLabel"); lbl1.setAlignment(QtC.Qt.AlignLeft)
+            lbl2 = QtW.QLabel("2"); lbl2.setObjectName("TickLabel"); lbl2.setAlignment(QtC.Qt.AlignCenter)
+            lbl3 = QtW.QLabel("3"); lbl3.setObjectName("TickLabel"); lbl3.setAlignment(QtC.Qt.AlignCenter)
+            lbl4 = QtW.QLabel("4"); lbl4.setObjectName("TickLabel"); lbl4.setAlignment(QtC.Qt.AlignCenter)
+            lbl5 = QtW.QLabel("5"); lbl5.setObjectName("TickLabel"); lbl5.setAlignment(QtC.Qt.AlignRight)
+
+            labels_layout.addWidget(lbl1); labels_layout.addStretch(1)
+            labels_layout.addWidget(lbl2); labels_layout.addStretch(1)
+            labels_layout.addWidget(lbl3); labels_layout.addStretch(1)
+            labels_layout.addWidget(lbl4); labels_layout.addStretch(1)
+            labels_layout.addWidget(lbl5)
+            v.addLayout(labels_layout)
             v.addStretch(1)
 
         # 마지막 Stretch를 제거하고, 결과 미리보기와 더 많은 공간을 둡니다.
