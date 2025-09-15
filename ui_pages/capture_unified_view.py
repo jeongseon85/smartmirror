@@ -1,17 +1,21 @@
 # -*- coding: utf-8 -*-
 # capture_unified_view_kiosk.py
 # PyQt5 / Python 3.6 compatible
-from __future__ import print_function
-from PyQt5 import QtCore, QtGui, QtWidgets as QtW
-from PyQt5 import QtCore as QtC, QtGui as QtG
+import os
+import csv
+import re
+import numpy as np
+import cv2
+from PyQt5 import QtWidgets as QtW, QtGui as QtG, QtCore as QtC
 
+# result_pages에서 중복 정의된 클래스 가져오기
+from .result_pages import ProductDetailDialog, ClickableLabel
 
 def open_url_external(url):
-    QtGui.QDesktopServices.openUrl(QtCore.QUrl(url or ""))
-
+    QtG.QDesktopServices.openUrl(QtC.QUrl(url or ""))
 
 class MiniProductCard(QtW.QFrame):
-    clicked = QtCore.pyqtSignal(dict)
+    clicked = QtC.pyqtSignal(dict)
 
     def __init__(self, product=None, parent=None):
         super(MiniProductCard, self).__init__(parent)
@@ -22,20 +26,20 @@ class MiniProductCard(QtW.QFrame):
 
         self._product = None
         self.img = QtW.QLabel("이미지", self)
-        self.img.setAlignment(QtCore.Qt.AlignCenter)
+        self.img.setAlignment(QtC.Qt.AlignCenter)
         self.img.setFixedSize(120, 120)
         self.img.setStyleSheet("background:transparent;")
         self.name = QtW.QLabel("제품명", self)
-        self.name.setAlignment(QtCore.Qt.AlignHCenter | QtCore.Qt.AlignTop)
+        self.name.setAlignment(QtC.Qt.AlignHCenter | QtC.Qt.AlignTop)
         self.name.setWordWrap(True)
         font = self.name.font()
-        font.setPointSize(11)  # 작게
+        font.setPointSize(15)
         self.name.setFont(font)
 
         v = QtW.QVBoxLayout(self)
         v.setContentsMargins(8, 8, 8, 8)
         v.setSpacing(6)
-        v.addWidget(self.img, 0, QtCore.Qt.AlignHCenter)
+        v.addWidget(self.img, 0, QtC.Qt.AlignHCenter)
         v.addWidget(self.name)
 
         self.set_product(product)
@@ -54,25 +58,24 @@ class MiniProductCard(QtW.QFrame):
         self.name.setText(p.get("name", "제품명"))
         img_path = p.get("img")
         if img_path:
-            pix = QtGui.QPixmap(img_path)
+            pix = QtG.QPixmap(img_path)
             if not pix.isNull():
-                self.img.setPixmap(pix.scaled(self.img.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
+                self.img.setPixmap(pix.scaled(self.img.size(), QtC.Qt.KeepAspectRatio, QtC.Qt.SmoothTransformation))
             else:
                 self.img.setText("이미지\n로드 실패")
         else:
             self.img.setText("이미지 없음")
 
-
 class Carousel(QtW.QWidget):
-    cardClicked = QtCore.pyqtSignal(dict)
+    cardClicked = QtC.pyqtSignal(dict)
 
     def __init__(self, parent=None):
         super(Carousel, self).__init__(parent)
         self.stack = QtW.QStackedWidget(self)
         self.prevBtn = QtW.QPushButton("←")
         self.nextBtn = QtW.QPushButton("→")
-        self.prevBtn.setFixedWidth(32)
-        self.nextBtn.setFixedWidth(32)
+        self.prevBtn.setFixedWidth(50)
+        self.nextBtn.setFixedWidth(50)
 
         self.prevBtn.clicked.connect(self.prev)
         self.nextBtn.clicked.connect(self.next)
@@ -80,9 +83,9 @@ class Carousel(QtW.QWidget):
         h = QtW.QHBoxLayout(self)
         h.setContentsMargins(0, 0, 0, 0)
         h.setSpacing(6)
-        h.addWidget(self.prevBtn, 0, QtCore.Qt.AlignVCenter)
+        h.addWidget(self.prevBtn, 0, QtC.Qt.AlignVCenter)
         h.addWidget(self.stack, 1)
-        h.addWidget(self.nextBtn, 0, QtCore.Qt.AlignVCenter)
+        h.addWidget(self.nextBtn, 0, QtC.Qt.AlignVCenter)
 
         self._items = []
 
@@ -111,9 +114,8 @@ class Carousel(QtW.QWidget):
             i = (self.stack.currentIndex() + 1) % self.stack.count()
             self.stack.setCurrentIndex(i)
 
-
 class CategorySection(QtW.QFrame):
-    productClicked = QtCore.pyqtSignal(dict)
+    productClicked = QtC.pyqtSignal(dict)
 
     def __init__(self, title, parent=None):
         super(CategorySection, self).__init__(parent)
@@ -123,7 +125,7 @@ class CategorySection(QtW.QFrame):
 
         self.title = QtW.QLabel(title)
         tfont = self.title.font()
-        tfont.setPointSize(13)
+        tfont.setPointSize(16)
         tfont.setBold(True)
         self.title.setFont(tfont)
 
@@ -140,7 +142,6 @@ class CategorySection(QtW.QFrame):
         # products: [{name, img, price, desc, ...}]
         self.carousel.set_items(products or [])
 
-
 class MakeupTipsSection(QtW.QFrame):
     def __init__(self, parent=None):
         super(MakeupTipsSection, self).__init__(parent)
@@ -150,7 +151,7 @@ class MakeupTipsSection(QtW.QFrame):
 
         self.title = QtW.QLabel("추천화장법")
         tfont = self.title.font()
-        tfont.setPointSize(13)
+        tfont.setPointSize(20)
         tfont.setBold(True)
         self.title.setFont(tfont)
 
@@ -183,9 +184,9 @@ class MakeupTipsSection(QtW.QFrame):
             thumb.setFixedSize(60, 60)
             thumb.setStyleSheet("background:transparent;")
             if tip.get("thumb"):
-                pix = QtGui.QPixmap(tip["thumb"])
+                pix = QtG.QPixmap(tip["thumb"])
                 if not pix.isNull():
-                    thumb.setPixmap(pix.scaled(thumb.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
+                    thumb.setPixmap(pix.scaled(thumb.size(), QtC.Qt.KeepAspectRatio, QtC.Qt.SmoothTransformation))
                 else:
                     thumb.setText("썸네일\n실패")
             else:
@@ -197,7 +198,6 @@ class MakeupTipsSection(QtW.QFrame):
             self.listBox.addWidget(row)
         self.listBox.addStretch(1)
 
-
 class SurveyPanel(QtW.QWidget):
     """오른쪽 패널의 피부진단 섹션(문항 → 슬라이더, 미리보기 제공)"""
     scoresChanged = QtC.pyqtSignal(list)
@@ -206,41 +206,67 @@ class SurveyPanel(QtW.QWidget):
         super().__init__(parent)
         self.setObjectName("SurveyPanel")
 
-        # 폰트 큼 / 줄간격(라인하이트) 키움 / 여백 최소화
+        # 스타일시트를 개선하여 가독성과 디자인을 향상시킵니다.
         self.setStyleSheet("""
-            QLabel#Guide   { font-size:20px; font-weight:800; letter-spacing:0.2px; }
-            QLabel#Sub     { font-size:13px; color:#666; margin:0 0 8px 0; }
-            QLabel#Q       { font-size:16px; font-weight:700; line-height:130%; }   /* 줄간격 ↑ */
-            QLabel#Preview { font-size:16px; font-weight:800; margin-top:6px; }
+        QWidget#SurveyPanel { background: transparent; }
+        QLabel#Guide   { font-size: 22px; font-weight: 600; color: #212529; }
+        QLabel#Sub     { font-size: 15px; color: #6c757d; margin-bottom: 20px; }
+        QLabel#Q       { font-size: 16px; font-weight: 500; color: #343a40; }
 
-            QSlider { margin:0; }
-            QSlider::groove:horizontal { height:8px; background:#ead5d1; border-radius:4px; }
-            QSlider::sub-page:horizontal { background:#c57c73; border-radius:4px; }
-            QSlider::handle:horizontal {
-                width:20px; height:20px; margin:-8px 0; border-radius:10px;
-                background:#c57c73; border:1px solid #b96e65;
-            }
+        QSlider::groove:horizontal {
+            height: 6px;
+            background: #e9ecef;
+            border-radius: 3px;
+        }
+        QSlider::handle:horizontal {
+            width: 20px; height: 20px; margin: -7px 0;
+            border-radius: 10px;
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #a8c0d3, stop:1 #8faabf);
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+        QSlider::sub-page:horizontal {
+            background: qlineargradient(x1:0, y1:0, x2:1, y2:1, stop:0 #a8c0d3, stop:1 #8faabf);
+            border-radius: 3px;
+        }
+
+        QFrame#PreviewContainer {
+            background-color: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #ffffff, stop:1 #f8f9fa);
+            border: 1px solid #e9ecef;
+            border-radius: 12px;
+        }
+        QLabel#PreviewTitle {
+            font-size: 18px; color: #6c757d; font-weight: 500;
+            padding-top: 8px;
+        }
+        QLabel#PreviewResult {
+            font-size: 80px; font-weight: 700;
+            color: #94B7CF;
+            padding-bottom: 8px;
+        }
         """)
 
         self.question_texts = [
-            "1) 오후 3~5시 T존(이마·코) 번들거림/광택이 눈에 띈다.",
-            "2) 세안 후 10분 이내 당김·각질이 올라온다.",
-            "3) 새 제품/자외선/마찰 후 24시간 내 따가움·가려움·홍조가 생긴다.",
-            "4) 모공 확장/블랙헤드가 보이고 유분으로 메이크업이 무너진다.",
-            "5) 염증성 트러블(빨갛고 아픈 뾰루지)이 주 1회 이상 생긴다.",
+            "오후 3~5시 T존(이마·코) 번들거림/광택이 눈에 띈다.",
+            "세안 후 10분 이내 당김·각질이 올라온다.",
+            "새 제품/자외선/마찰 후 24시간 내 따가움·가려움·홍조가 생긴다.",
+            "모공 확장/블랙헤드가 보이고 유분으로 메이크업이 무너진다.",
+            "염증성 트러블(빨갛고 아픈 뾰루지)이 주 1회 이상 생긴다.",
         ]
         self.sliders = []
 
         v = QtW.QVBoxLayout(self)
-        v.setContentsMargins(8, 8, 8, 8)   # ← 패널 내부 여백 최소
-        v.setSpacing(10)                  # ← 문항/슬라이더 간격도 작게
+        v.setContentsMargins(15, 15, 15, 15)
+        v.setSpacing(10)
 
         guide = QtW.QLabel("피부진단"); guide.setObjectName("Guide")
         sub   = QtW.QLabel("최근 2주 기준 · 1~5로 응답"); sub.setObjectName("Sub")
         v.addWidget(guide); v.addWidget(sub)
 
-        for q in self.question_texts:
-            qlab = QtW.QLabel(q); qlab.setObjectName("Q"); qlab.setWordWrap(True)
+        # 질문과 질문 사이에 Stretch를 추가하여 패널 높이에 맞게 분산시킵니다.
+        v.addStretch(1)
+
+        for i, q_text in enumerate(self.question_texts):
+            qlab = QtW.QLabel(f"{i+1}) {q_text}"); qlab.setObjectName("Q"); qlab.setWordWrap(True)
             v.addWidget(qlab)
 
             sld = QtW.QSlider(QtC.Qt.Horizontal)
@@ -249,10 +275,29 @@ class SurveyPanel(QtW.QWidget):
             sld.valueChanged.connect(self._on_value_changed)
             v.addWidget(sld)
             self.sliders.append(sld)
+            v.addStretch(1)
 
-        self.preview = QtW.QLabel("미리보기: -"); self.preview.setObjectName("Preview")
-        v.addWidget(self.preview)
-        v.addStretch(1)
+        # 마지막 Stretch를 제거하고, 결과 미리보기와 더 많은 공간을 둡니다.
+        v.takeAt(v.count() - 1)
+        v.addStretch(2)
+
+        # --- 결과 미리보기 섹션 ---
+        preview_container = QtW.QFrame()
+        preview_container.setObjectName("PreviewContainer")
+        preview_layout = QtW.QVBoxLayout(preview_container)
+        preview_layout.setContentsMargins(20, 15, 20, 15) # 카드 내부 여백을 늘려줍니다.
+
+        preview_title = QtW.QLabel("예상 피부 타입")
+        preview_title.setObjectName("PreviewTitle")
+        preview_title.setAlignment(QtC.Qt.AlignCenter)
+
+        self.preview_result = QtW.QLabel("-")
+        self.preview_result.setObjectName("PreviewResult")
+        self.preview_result.setAlignment(QtC.Qt.AlignCenter)
+
+        preview_layout.addWidget(preview_title)
+        preview_layout.addWidget(self.preview_result)
+        v.addWidget(preview_container)
 
         self._update_preview()
 
@@ -275,7 +320,8 @@ class SurveyPanel(QtW.QWidget):
         return self._score_skin_type(*self._scores())[0]
 
     def _update_preview(self):
-        self.set_preview_text(self.infer_skin_type())
+        skin_type = self.infer_skin_type()
+        self.preview_result.setText(skin_type or "-")
 
     # ---------- 시그널/외부 API ----------
     def _on_value_changed(self, _):
@@ -284,11 +330,9 @@ class SurveyPanel(QtW.QWidget):
         self._update_preview()
 
     def set_preview_text(self, text: str):
-        self.preview.setText(f"미리보기: {text or '-'}")
-
+        self.preview_result.setText(text or "-")
 
 class SimpleCarousel(QtW.QFrame):
-    """◀ ▶ 버튼으로 아이템 넘기기 (이미지 고정 크기, 미니멀 카드)"""
     clicked = QtC.pyqtSignal(dict)
 
     # 카드 이미지 한 변 픽셀 (원하면 200~240 사이로 취향대로)
@@ -297,37 +341,39 @@ class SimpleCarousel(QtW.QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.items = []
-        self.idx = 0
+        self.idx = 0 # 현재 아이템 인덱스
         self.setStyleSheet("QFrame{background:transparent;}")
 
-        # 버튼: 작게/미니멀
+        # 버튼: 덜 둥글고 깔끔하게
         self.prevBtn = QtW.QToolButton(text="◀")
         self.nextBtn = QtW.QToolButton(text="▶")
         for b in (self.prevBtn, self.nextBtn):
             b.setAutoRaise(True)
-            b.setFixedSize(28, 28)
-            b.setStyleSheet(
-                "QToolButton{background: rgba(255,255,255,220);"
-                "border:1px solid #ddd; border-radius:14px;}"
-                "QToolButton:hover{background:white;}"
-            )
+            b.setFixedSize(32, 32)
+            b.setStyleSheet("""
+                QToolButton {
+                    background: rgba(255,255,255,0.7);
+                    border: 1px solid #e0e0e0;
+                    border-radius: 16px;
+                    font-size: 16px;
+                }
+                QToolButton:hover { background: white; }
+            """)
 
         # 이미지: 고정 정사각 + 여백 있는 보더
         self.img = ClickableLabel()
         self.img.setFixedSize(self.IMG_SIDE, self.IMG_SIDE)
         self.img.setAlignment(QtC.Qt.AlignCenter)
-        self.img.setStyleSheet(
-            "background:#fafafa; border:1px solid #e8e8e8; border-radius:12px;"
-        )
+        self.img.setStyleSheet("background:#f8f9fa; border:1px solid #e9ecef; border-radius:12px;")
 
-        # 텍스트: 작게/두 줄까지만
+        # 텍스트: 폰트 크기 명시적으로 키움
         self.name = QtW.QLabel("-", alignment=QtC.Qt.AlignCenter)
         self.name.setWordWrap(True)
-        f = self.name.font(); f.setPointSize(max(9, f.pointSize()-1)); self.name.setFont(f)
+        f = self.name.font(); f.setPointSize(16); f.setWeight(QtG.QFont.Medium); self.name.setFont(f)
 
         self.meta = QtW.QLabel("", alignment=QtC.Qt.AlignCenter)
         self.meta.setObjectName("ProductMeta")
-        fm = self.meta.font(); fm.setPointSize(max(8, fm.pointSize()-2)); self.meta.setFont(fm)
+        fm = self.meta.font(); fm.setPointSize(14); self.meta.setFont(fm)
         self.meta.setStyleSheet("color:#555;")
 
         # 레이아웃 (버튼을 이미지 양옆, 간격은 넉넉히)
@@ -403,10 +449,6 @@ class SimpleCarousel(QtW.QFrame):
         it["image"]      = it.get("image") or path
         self.clicked.emit(it)
 
-
-
-
-
 class RecommendationPanel(QtW.QWidget):
     productClicked = QtC.pyqtSignal(dict)
 
@@ -431,10 +473,10 @@ class RecommendationPanel(QtW.QWidget):
 
         # 결과 요약 띠
         self.condLabel = QtW.QLabel("결과: -")
-        cfont = self.condLabel.font(); cfont.setPointSize(11); cfont.setBold(True)
+        cfont = self.condLabel.font(); cfont.setPointSize(14); cfont.setBold(True)
         self.condLabel.setFont(cfont)
-        self.condLabel.setStyleSheet("background: rgba(255,255,255,210); border-radius: 8px; padding: 6px;")
-        self.v.addWidget(self.condLabel)
+        self.condLabel.setStyleSheet("background: rgba(255,255,255,220); border-radius: 6px; padding: 10px 12px;")
+        self.v.addWidget(self.condLabel, 0, QtC.Qt.AlignTop)
 
         # 추천 화장법 섹션 (하단)
         self.sec_tips = MakeupTipsSection()
@@ -481,7 +523,6 @@ class RecommendationPanel(QtW.QWidget):
             return out
 
         return {
-            "파운데이션": conv((recos_dict or {}).get("파데")),
             "쿠션":     conv((recos_dict or {}).get("쿠션")),
             "립":       conv((recos_dict or {}).get("립")),
             "아이":     conv((recos_dict or {}).get("아이")),
@@ -523,7 +564,7 @@ class RecommendationPanel(QtW.QWidget):
 
         # CSV recos를 섹션별로
         sections = self._to_sections(recos)
-        order = ["파운데이션","쿠션","립","아이"]
+        order = ["쿠션","립","아이"]
         any_added = False
         for k in order:
             items = sections.get(k) or []
@@ -535,7 +576,22 @@ class RecommendationPanel(QtW.QWidget):
         self._render_tips(tips) if hasattr(self, "_render_tips") else None
 
         if not any_added:
-            self.v.addWidget(QtW.QLabel("조건에 맞는 추천이 없어요."))
+            no_results_label = QtW.QLabel("😕<br>조건에 맞는 추천 제품이 없습니다.")
+            no_results_label.setAlignment(QtC.Qt.AlignCenter)
+            no_results_label.setWordWrap(True)
+            no_results_label.setObjectName("NoResultsLabel")
+            no_results_label.setStyleSheet("""
+                QLabel#NoResultsLabel {
+                    font-size: 18px;
+                    color: #868e96;
+                    background-color: #f8f9fa;
+                    border: 1px dashed #ced4da;
+                    border-radius: 12px;
+                    padding: 40px;
+                    margin: 10px;
+                }
+            """)
+            self.v.insertWidget(self.v.count() - 2, no_results_label)
 
         # 화장법 섹션 세팅
         self.sec_tips.set_items(tips or [])
@@ -543,30 +599,37 @@ class RecommendationPanel(QtW.QWidget):
     def set_condition(self, text: str):
         self.condLabel.setText(text or "결과: -")
 
-
-
-
 class RightSlidePanel(QtW.QFrame):
     def __init__(self, parent=None):
         super(RightSlidePanel, self).__init__(parent)
         self.setObjectName("RightSlidePanel")
         self.setFrameShape(QtW.QFrame.NoFrame)
+        # 패널 스타일: 덜 둥글게, 미세한 테두리 추가
         self.setStyleSheet("""
-            QFrame#RightSlidePanel{
-                background:rgba(255,255,255,210);
-                border:none; border-radius:8px;
+            QFrame#RightSlidePanel {
+                background: rgba(255, 255, 255, 230);
+                border-left: 1px solid #dee2e6;
+                border-radius: 0px;
             }
         """)
 
+        # 핸들 버튼: 세로 탭 형태로 변경
         self.handleBtn = QtW.QPushButton("▶")
-        self.handleBtn.setFixedWidth(24)
+        self.handleBtn.setFixedSize(28, 80)
+        self.handleBtn.setStyleSheet("""
+            QPushButton {
+                font-size: 16px; font-weight: bold; color: #fff;
+                background-color: #94B7CF;
+                border: none;
+                border-top-left-radius: 12px; border-bottom-left-radius: 12px;
+            }
+            QPushButton:hover { background-color: #a5c8e0; }
+        """)
         self.handleBtn.clicked.connect(self.toggle)
 
         self.stack = QtW.QStackedWidget()
         self.pageSurvey = SurveyPanel()
         self.pageReco   = RecommendationPanel()
-        # 내부 위젯은 투명 배경 유지
-        self.pageSurvey.setStyleSheet("background:transparent;")
         self.pageReco.setStyleSheet("background:transparent;")
         self.stack.addWidget(self.pageSurvey)
         self.stack.addWidget(self.pageReco)
@@ -575,11 +638,11 @@ class RightSlidePanel(QtW.QFrame):
         h.setContentsMargins(6, 6, 6, 6)    # ← 여백 최소
         h.setSpacing(6)                     # ← 버튼과 스택 간격 축소
         h.addWidget(self.stack, 1)
-        h.addWidget(self.handleBtn, 0, QtCore.Qt.AlignVCenter)
+        h.addWidget(self.handleBtn, 0, QtC.Qt.AlignVCenter)
 
         # ✅ 가로는 넓게, 세로는 레이아웃에 맞춰 자동으로
-        self.setMinimumWidth(560)           # 원하는 최소 폭 (560~620 추천)
-        self.setMaximumWidth(900)           # 과도하게 커지지 않게 상한
+        self.setMinimumWidth(600)           # 원하는 최소 폭 (560~620 추천)
+        self.setMaximumWidth(1000)           # 과도하게 커지지 않게 상한
         self.setMinimumHeight(0)            # ❌ 고정 높이 금지 (기존 1200 제거)
         self.setSizePolicy(QtW.QSizePolicy.Preferred, QtW.QSizePolicy.Expanding)
 
@@ -590,16 +653,14 @@ class RightSlidePanel(QtW.QFrame):
         self.pageReco.setSizePolicy(pol)
 
         self._opened = True
-    
-
 
     def toggle(self):
         self._opened = not self._opened
         if self._opened:
-            self.setMinimumWidth(320)
+            self.setMinimumWidth(600)
             self.handleBtn.setText("▶")
         else:
-            self.setMinimumWidth(24)
+            self.setMinimumWidth(self.handleBtn.width())
             self.handleBtn.setText("◀")
 
     def show_survey(self):
@@ -608,113 +669,116 @@ class RightSlidePanel(QtW.QFrame):
     def show_recommendations(self):
         self.stack.setCurrentWidget(self.pageReco)
 
-
 class BottomDetailView(QtW.QFrame):
     def __init__(self, parent=None):
         super(BottomDetailView, self).__init__(parent)
         self.setObjectName("BottomDetailView")
         self.setFrameShape(QtW.QFrame.NoFrame)
+        # 더 깔끔하고 가독성 높은 스타일로 변경
         self.setStyleSheet("""
-        QFrame#BottomDetailView { background: rgba(255,255,255,210); border-radius: 12px; }
+        QFrame#BottomDetailView {
+            background: transparent;
+            border: none;
+        }
         QLabel { background: transparent; }
+        QLabel#DetailName {
+            font-size: 28px;
+            font-weight: 600;
+            color: #212529;
+        }
+        QLabel#DetailPrice {
+            font-size: 24px;
+            font-weight: 500;
+            color: #94B7CF;
+            padding-bottom: 10px;
+        }
+        QLabel#DetailDesc {
+            font-size: 17px;
+            color: #495057;
+        }
+        QLabel#DetailImage {
+            background-color: #f1f3f5;
+            border: 1px solid #e9ecef;
+            border-radius: 12px;
+        }
         """)
 
-        self.setFixedHeight(220)
+        # 높이를 늘려 여유 공간 확보
+        self.setMinimumHeight(260)
 
-        self.name = QtW.QLabel("이름")
-        nfont = self.name.font(); nfont.setPointSize(12); nfont.setBold(True)
-        self.name.setFont(nfont)
+        self.img = QtW.QLabel("제품 이미지를\n표시할 공간입니다.")
+        self.img.setObjectName("DetailImage")
+        self.img.setAlignment(QtC.Qt.AlignCenter)
+        self.img.setFixedSize(200, 200) # 이미지 크기 증가
 
-        self.img = QtW.QLabel("이미지")
-        self.img.setAlignment(QtCore.Qt.AlignCenter)
-        self.img.setFixedSize(160, 160)
-        self.img.setStyleSheet("background:transparent;")
+        self.name = QtW.QLabel("제품을 선택해주세요")
+        self.name.setObjectName("DetailName")
 
-        self.price = QtW.QLabel("가격: -")
-        self.desc = QtW.QLabel("설명: -")
+        self.price = QtW.QLabel("")
+        self.price.setObjectName("DetailPrice")
+
+        self.desc = QtW.QLabel("")
+        self.desc.setObjectName("DetailDesc")
         self.desc.setWordWrap(True)
+        self.desc.setAlignment(QtC.Qt.AlignTop) # 설명이 위쪽에 붙도록
 
-        left = QtW.QVBoxLayout()
-        left.addWidget(self.name)
-        left.addWidget(self.price)
-        left.addWidget(self.desc)
-        left.addStretch(1)
+        # 텍스트 영역 레이아웃
+        text_layout = QtW.QVBoxLayout()
+        text_layout.setSpacing(4) # 텍스트 간 간격 축소
+        text_layout.addWidget(self.name)
+        text_layout.addWidget(self.price)
+        text_layout.addWidget(self.desc, 1) # 설명이 남은 공간을 모두 차지하도록
 
-        lay = QtW.QHBoxLayout(self)
-        lay.setContentsMargins(8, 8, 8, 8)
-        lay.setSpacing(10)
-        lay.addWidget(self.img, 0, QtCore.Qt.AlignLeft)
-        lay.addLayout(left, 1)
+        # 전체 레이아웃
+        main_layout = QtW.QHBoxLayout(self)
+        # 여백을 늘려 시원한 느낌을 줍니다.
+        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(20)
+        main_layout.addWidget(self.img)
+        main_layout.addLayout(text_layout, 1)
+
+        # 초기 상태 설정
+        self.show_product(None)
 
     def show_product(self, p):
         if not p:
-            self.name.setText("이름")
-            self.price.setText("가격: -")
-            self.desc.setText("설명: -")
-            self.img.setText("이미지")
+            self.name.setText("제품을 선택해주세요")
+            self.price.setText("")
+            self.desc.setText("오른쪽 추천 목록에서 제품을 누르면 상세 정보가 표시됩니다.")
+            self.img.setText("이미지 없음")
+            self.img.setPixmap(QtG.QPixmap()) # 기존 이미지 제거
             return
-        self.name.setText(p.get("name", "이름"))
-        self.price.setText("가격: %s" % p.get("price", "-"))
-        self.desc.setText("설명: %s" % p.get("description", "-"))
 
-        img_path = p.get("img")
+        self.name.setText(p.get("name", "이름 정보 없음"))
+
+        # 가격 포맷팅 개선
+        price_val = p.get("price")
+        try:
+            # 숫자형 문자열, 정수, 실수를 모두 처리
+            price_str = f"₩{int(float(price_val)):,}" if price_val not in (None, "") else ""
+        except (ValueError, TypeError):
+            price_str = str(price_val) if price_val not in (None, "") else ""
+        self.price.setText(price_str)
+
+        self.desc.setText(p.get("description") or p.get("desc") or "")
+
+        # 이미지 로드 및 표시
+        img_path = p.get("image_path") or p.get("img") or p.get("image")
         if img_path:
-            pix = QtGui.QPixmap(img_path)
+            pix = QtG.QPixmap(img_path)
             if not pix.isNull():
-                self.img.setPixmap(pix.scaled(self.img.size(), QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation))
+                # 이미지를 부드럽게 스케일링하여 표시
+                self.img.setPixmap(pix.scaled(self.img.size(), QtC.Qt.KeepAspectRatio, QtC.Qt.SmoothTransformation))
             else:
                 self.img.setText("이미지\n로드 실패")
+                self.img.setPixmap(QtG.QPixmap())
         else:
             self.img.setText("이미지 없음")
+            self.img.setPixmap(QtG.QPixmap())
 
-# === from result_pages.py 참고: 가로 드래그 스크롤 ===
-class DragScrollArea(QtW.QScrollArea):
-    def __init__(self, *a, **k):
-        super().__init__(*a, **k)
-        self.setWidgetResizable(True)
-        self._drag = False; self._sx = 0; self._sv = 0
-    def mousePressEvent(self, e):
-        if e.buttons() & QtC.Qt.LeftButton:
-            self._drag = True; self._sx = e.globalX(); self._sv = self.horizontalScrollBar().value()
-        super().mousePressEvent(e)
-    def mouseMoveEvent(self, e):
-        if self._drag:
-            dx = e.globalX() - self._sx
-            self.horizontalScrollBar().setValue(self._sv - dx)
-        super().mouseMoveEvent(e)
-    def mouseReleaseEvent(self, e):
-        self._drag = False
-        super().mouseReleaseEvent(e)
-
-class ClickableLabel(QtW.QLabel):
-    clicked = QtC.pyqtSignal()
-    def mousePressEvent(self, e):
-        if e.button() == QtC.Qt.LeftButton:
-            self.clicked.emit()
-
-class ProductDetailDialog(QtW.QDialog):
-    def __init__(self, card: dict, parent=None):
-        super().__init__(parent)
-        self.setWindowTitle(card.get("name","상세 정보"))
-        v = QtW.QVBoxLayout(self)
-
-        img = QtW.QLabel()
-        pix = QtG.QPixmap(card.get("image_path",""))
-        if not pix or pix.isNull():
-            pix = QtG.QPixmap(240, 240); pix.fill(QtC.Qt.lightGray)
-        img.setPixmap(pix.scaled(360, 360, QtC.Qt.KeepAspectRatio, QtC.Qt.SmoothTransformation))
-        img.setAlignment(QtC.Qt.AlignCenter)
-
-        name = QtW.QLabel(card.get("name","")); name.setObjectName("ProductTitle")
-        price = card.get("price"); price_lbl = QtW.QLabel(f"₩{price:,}" if isinstance(price,int) else "")
-        desc = QtW.QLabel(card.get("desc") or card.get("description","")); desc.setWordWrap(True)
-
-        v.addWidget(img); v.addWidget(name, alignment=QtC.Qt.AlignCenter)
-        v.addWidget(price_lbl, alignment=QtC.Qt.AlignCenter); v.addWidget(desc)
-
-        btns = QtW.QDialogButtonBox(QtW.QDialogButtonBox.Close); btns.rejected.connect(self.reject)
-        v.addWidget(btns)
-
+# NOTE: DragScrollArea, ClickableLabel, ProductDetailDialog 클래스는
+# 이 파일에서 제거하고 result_pages.py에서 import하여 사용합니다.
+# DragScrollArea는 이 뷰에서 사용되지 않으므로 완전히 제거합니다.
 
 class CaptureUnifiedView(QtW.QWidget):
     def __init__(self, parent=None):
@@ -728,8 +792,49 @@ class CaptureUnifiedView(QtW.QWidget):
         self.mirrorToggle = QtW.QCheckBox("거울모드")
         self.settingsBtn = QtW.QPushButton("설정")
 
-        topBar = QtW.QHBoxLayout()
-        topBar.setContentsMargins(8, 6, 8, 6)
+        # --- 상단 바 스타일링 및 레이아웃 ---
+        topBarContainer = QtW.QWidget()
+        topBarContainer.setObjectName("TopBarContainer")
+        # 여기에 고정 높이를 직접 지정하여, 레이아웃 문제와 관계없이 항상 원하는 높이를 갖도록 합니다.
+        # 이 값을 조절하여 원하시는 높이로 변경할 수 있습니다. (예: 80)
+        topBarContainer.setFixedHeight(70)
+
+        # QSS(CSS와 유사)를 사용하여 상단 바의 스타일을 지정합니다.
+        topBarContainer.setStyleSheet("""#TopBarContainer {
+    background-color: #ffffff;
+    border-bottom: 1px solid #dee2e6;
+}
+#TopBarContainer QRadioButton,
+#TopBarContainer QCheckBox {
+    font-size: 17px;
+    font-weight: 500;
+    color: #495057;
+    padding: 8px 12px;
+    border: none;
+    background-color: transparent;
+}
+#TopBarContainer QRadioButton:checked {
+    color: #94B7CF;
+    font-weight: 600;
+}
+#TopBarContainer QRadioButton::indicator,
+#TopBarContainer QCheckBox::indicator {
+    width: 22px; height: 22px;
+}
+#TopBarContainer QPushButton {
+    font-size: 16px;
+    font-weight: 500;
+    color: #343a40;
+    background-color: #f1f3f5;
+    border: 1px solid #dee2e6;
+    border-radius: 8px;
+    padding: 8px 20px;
+}
+#TopBarContainer QPushButton:hover { background-color: #e9ecef; }""")
+
+        topBar = QtW.QHBoxLayout(topBarContainer)
+        topBar.setContentsMargins(15, 0, 15, 0) # 좌우 여백
+        topBar.setSpacing(15) # 위젯 간 간격을 조금 더 넓게
         topBar.addWidget(self.btnFace)
         topBar.addWidget(self.btnProduct)
         topBar.addStretch(1)
@@ -738,7 +843,7 @@ class CaptureUnifiedView(QtW.QWidget):
 
         # === 카메라(배경) ===
         self.cameraView = QtW.QLabel("카메라 미리보기")
-        self.cameraView.setAlignment(QtCore.Qt.AlignCenter)
+        self.cameraView.setAlignment(QtC.Qt.AlignCenter)
         self.cameraView.setMinimumHeight(360)
         self.cameraView.setSizePolicy(QtW.QSizePolicy.Expanding, QtW.QSizePolicy.Expanding)
         self.cameraView.setScaledContents(False)
@@ -751,7 +856,7 @@ class CaptureUnifiedView(QtW.QWidget):
         self.rightPanel.show_survey()
 
         # === 하단 바(촬영/ROI) + 상세 ===
-        self.shotBtn = QtW.QPushButton("● 촬영")
+        self.shotBtn = QtW.QPushButton("촬영")
         self.roiBtn = QtW.QPushButton("영역지정"); self.roiBtn.setCheckable(True)
 
         self.detail = BottomDetailView()
@@ -760,7 +865,7 @@ class CaptureUnifiedView(QtW.QWidget):
         root = QtW.QVBoxLayout(self)
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
-        root.addLayout(topBar)
+        root.addWidget(topBarContainer) # 레이아웃 대신 스타일이 적용된 컨테이너 위젯을 추가
 
         bg = QtW.QWidget()
         bg_layout = QtW.QVBoxLayout(bg)
@@ -768,27 +873,51 @@ class CaptureUnifiedView(QtW.QWidget):
         bg_layout.addWidget(self.cameraView)
 
         overlay = QtW.QWidget()
-        overlay.setAttribute(QtCore.Qt.WA_StyledBackground, True)
+        overlay.setAttribute(QtC.Qt.WA_StyledBackground, True)
         overlay.setStyleSheet("background: transparent;")
         grid = QtW.QGridLayout(overlay)
         grid.setContentsMargins(8, 8, 8, 8)
         grid.setSpacing(8)
 
-        grid.addWidget(self.rightPanel, 0, 1, 1, 1, QtCore.Qt.AlignTop)
-        
+        # AlignTop을 제거하여 패널이 할당된 셀의 세로 공간을 모두 채우도록 합니다.
+        grid.addWidget(self.rightPanel, 0, 1, 1, 1)
 
-        bottomWrap = QtW.QWidget()
+        # 하단 패널: QFrame으로 변경하여 스타일 적용
+        bottomWrap = QtW.QFrame()
+        bottomWrap.setObjectName("BottomPanel")
         bvl = QtW.QVBoxLayout(bottomWrap)
         bvl.setContentsMargins(0, 0, 0, 0)
-        bvl.setSpacing(6)
+        bvl.setSpacing(0) # 버튼 바와 상세 뷰 사이 간격 제거
+
+        # 버튼들을 담을 바
+        bbar_widget = QtW.QWidget()
         bbar = QtW.QHBoxLayout()
-        bbar.setContentsMargins(8, 6, 8, 6)
+        bbar_widget.setLayout(bbar)
+        bbar.setContentsMargins(12, 12, 12, 12)
         bbar.addStretch(1)
         bbar.addWidget(self.shotBtn)
         bbar.addWidget(self.roiBtn)
-        bvl.addLayout(bbar)
+        bbar.addStretch(1)
+
+        bvl.addWidget(bbar_widget)
         bvl.addWidget(self.detail)
-        bottomWrap.setStyleSheet("QWidget { background: rgba(255,255,255,210); border-radius:12px; }")
+
+        # 하단 패널 및 내부 버튼 스타일
+        bottomWrap.setStyleSheet("""
+        QFrame#BottomPanel {
+            background: rgba(255, 255, 255, 240);
+            border-top-left-radius: 16px;
+            border-top-right-radius: 16px;
+            border: 1px solid #dee2e6;
+            border-bottom: none;
+        }
+        QFrame#BottomPanel QPushButton {
+            min-height: 60px; font-size: 20px; font-weight: bold;
+            border-radius: 12px; padding: 0 30px;
+        }
+        """)
+        self.shotBtn.setStyleSheet("color: white; background-color: #94B7CF; border: none;")
+        self.roiBtn.setStyleSheet("color: #343a40; background-color: #e9ecef; border: 1px solid #dee2e6;")
 
         grid.addWidget(bottomWrap, 1, 0, 1, 2)
         grid.setRowStretch(0, 1)
@@ -811,16 +940,12 @@ class CaptureUnifiedView(QtW.QWidget):
 
         # === 회전/거울 토글 ===
         self.rotate90 = False  # Jetson 세로 모드에서 필요하면 True
-        QtW.QShortcut(QtGui.QKeySequence("Ctrl+R"), self, activated=self._toggle_rotate)
+        QtW.QShortcut(QtG.QKeySequence("Ctrl+R"), self, activated=self._toggle_rotate)
 
-        # === 데모 데이터 ===
-        self._inject_demo_data()
-    
-
+        # NOTE: __init__에서 데모 데이터를 주입하는 _inject_demo_data() 호출을 제거했습니다.
 
     def _resolve_image_path(self, fname: str) -> str:
         """CSV의 image 파일명을 실제 경로로 치환"""
-        import os
         if not fname:
             return ""
         base = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
@@ -848,7 +973,6 @@ class CaptureUnifiedView(QtW.QWidget):
     
     def _find_csv(self, filename="final.csv"):
         """루트(main.py 옆) 또는 data/ 폴더에서 CSV 찾기"""
-        import os
         base = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
         candidates = [
             os.path.join(base, "data", filename),   # smartmirror/data/final.csv
@@ -858,22 +982,6 @@ class CaptureUnifiedView(QtW.QWidget):
             if os.path.exists(p):
                 return p
         return None
-    
-    def _to_qimage(self, frame):
-        # 이미 QImage면 그대로
-        if isinstance(frame, QtG.QImage):
-            return frame
-        # numpy BGR -> QImage
-        if isinstance(frame, np.ndarray):
-            if frame.ndim == 3:
-                h, w, _ = frame.shape
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                return QtG.QImage(rgb.data, w, h, 3*w, QtG.QImage.Format_RGB888).copy()
-            elif frame.ndim == 2:
-                h, w = frame.shape
-                return QtG.QImage(frame.data, w, h, w, QtG.QImage.Format_Grayscale8).copy()
-        # 마지막 보루: 빈 이미지
-        return QtG.QImage()
 
     # ✅ 카메라 신호에 직접 물릴 슬롯 (프레임을 받고 미리보기+보관까지)
     @QtC.pyqtSlot(object)
@@ -882,11 +990,24 @@ class CaptureUnifiedView(QtW.QWidget):
         - 미리보기에 띄우고
         - parent.webcam_last_frame에 numpy BGR로 보관한다(제품 OCR용).
         """
-        qimg = self._to_qimage(frame)
+        # 1. 프레임을 QImage로 변환
+        qimg = None
+        if isinstance(frame, QtG.QImage):
+            qimg = frame
+        elif isinstance(frame, np.ndarray):
+            if frame.ndim == 3: # 컬러
+                h, w, _ = frame.shape
+                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                qimg = QtG.QImage(rgb.data, w, h, 3 * w, QtG.QImage.Format_RGB888).copy()
+            elif frame.ndim == 2: # 흑백
+                h, w = frame.shape
+                qimg = QtG.QImage(frame.data, w, h, w, QtG.QImage.Format_Grayscale8).copy()
+
+        # 2. QImage가 유효하면 화면 업데이트
         if not qimg.isNull():
             self.update_frame(qimg)
 
-        # OCR은 BGR ndarray가 편하므로 저장은 ndarray 기준으로
+        # 3. OCR을 위해 BGR numpy 배열로 변환하여 저장
         bgr = None
         if isinstance(frame, np.ndarray):
             bgr = frame
@@ -902,35 +1023,6 @@ class CaptureUnifiedView(QtW.QWidget):
         if parent is not None and bgr is not None:
             setattr(parent, "webcam_last_frame", bgr)
 
-    # (선택) update_frame도 프레임을 보관하도록 강화 — QImage만 들어오는 환경 대비
-    def update_frame(self, qimg, *args):
-        if isinstance(qimg, QtG.QImage):
-            if self.rotate90:
-                qimg = qimg.transformed(QtG.QTransform().rotate(90))
-            if self.mirrorToggle.isChecked():
-                qimg = qimg.mirrored(True, False)
-            pix = QtG.QPixmap.fromImage(qimg).scaled(
-                self.cameraView.size(),
-                QtCore.Qt.KeepAspectRatioByExpanding,
-                QtCore.Qt.SmoothTransformation
-            )
-            self.cameraView.setPixmap(pix)
-
-            # ✅ 여기서도 parent.webcam_last_frame 채워주기 (QImage만 주입되는 경우 대비)
-            try:
-                qimg_rgb = qimg.convertToFormat(QtG.QImage.Format_RGB888)
-                w, h = qimg_rgb.width(), qimg_rgb.height()
-                ptr = qimg_rgb.bits(); ptr.setsize(h * w * 3)
-                rgb = np.frombuffer(ptr, np.uint8).reshape((h, w, 3))
-                bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
-                parent = self.parent() or self.window()
-                if parent is not None:
-                    setattr(parent, "webcam_last_frame", bgr)
-            except Exception:
-                pass
-
-
-
 
     # ----- 이벤트 핸들러 -----
     def _on_mode_changed(self, checked):
@@ -939,16 +1031,6 @@ class CaptureUnifiedView(QtW.QWidget):
         else:
             self.rightPanel.show_recommendations()  # 이후 OCR 옵션 패널로 교체 예정
 
-    def _compute_skin_preview(self, scores):
-        # scores: [1..5] * 5
-        if not scores:
-            return "미리보기: -"
-        oily = (scores[0] + scores[2]) / 2.0
-        dry  = (scores[1] + scores[3]) / 2.0
-        sens = scores[4]
-        skin = max([("지성", oily), ("건성", dry), ("민감성", sens)], key=lambda x: x[1])[0]
-        return f"{skin} 피부"
-    
     def _current_skin_type(self):
         try:
             survey = self.rightPanel.pageSurvey
@@ -957,7 +1039,6 @@ class CaptureUnifiedView(QtW.QWidget):
             return None
 
     def apply_face_result(self, user_tone_num: str, user_color: str):
-        import re
         # --- 결과 정규화 ---
         _tone = None
         if user_tone_num is not None:
@@ -976,13 +1057,8 @@ class CaptureUnifiedView(QtW.QWidget):
         _pc = cmap.get(key, user_color)
         _skin = self._current_skin_type()
 
-        # 내부 상태로 저장(추천 조건에서 사용)
-        self._last_user_tone  = _tone
-        self._last_user_color = _pc
-        self._last_skin_type  = _skin
-
-        # 추천 로드
-        recos, tips = self._load_face_recommendations_safe()
+        # 추천 로드 (분석 결과를 직접 전달)
+        recos, tips = self._load_face_recommendations_safe(skin_type=_skin, personal_color=_pc, number=_tone)
 
         # ★★★ 여기! pageReco에 넣어야 함 ★★★
         rp = getattr(self.rightPanel, "pageReco", None)
@@ -994,22 +1070,16 @@ class CaptureUnifiedView(QtW.QWidget):
         else:
             print("[UI] rightPanel.pageReco 가 없습니다.")
 
-
-
     def _on_scores_changed(self, scores):
-        self.rightPanel.pageSurvey.set_preview_text(self._compute_skin_preview(scores))
-
+        # SurveyPanel의 자체 진단 로직을 사용하여 일관성 유지
+        skin_type = self.rightPanel.pageSurvey.infer_skin_type()
+        self.rightPanel.pageSurvey.set_preview_text(skin_type)
 
     def _on_shot_clicked(self):
         appwin = self.window()   # BeautyFinderApp
 
-        # 얼굴/제품 모드 확인
-        is_face_mode = True
-        try:
-            is_face_mode = self.faceRadio.isChecked()
-        except Exception:
-            pass
-
+        # 얼굴/제품 모드 확인 (올바른 변수명으로 수정)
+        is_face_mode = self.btnFace.isChecked()
         if is_face_mode:
             try:
                 # 통합 화면에서 얼굴 분석 시작한다는 '의도' 플래그를 켬
@@ -1026,9 +1096,6 @@ class CaptureUnifiedView(QtW.QWidget):
         else:
             from PyQt5.QtWidgets import QMessageBox
             QMessageBox.information(self, "안내", "제품 OCR 기능은 준비 중입니다.")
-
-
-
 
     def on_product_ocr_ok(self, payload: dict):
         """
@@ -1065,52 +1132,45 @@ class CaptureUnifiedView(QtW.QWidget):
     def on_product_ocr_err(self, msg: str):
         QtW.QMessageBox.critical(self, "OCR 오류", msg)
 
-
-
-
     def _toggle_rotate(self):
         self.rotate90 = not self.rotate90
 
     # ----- 외부에서 프레임 주입 -----
     def update_frame(self, qimg, *args):
-        """웹캠 프레임을 미리보기 QLabel에만 표시(가벼움)."""
-        from PyQt5 import QtGui, QtCore
-        if isinstance(qimg, QtGui.QImage):
-            if getattr(self, "rotate90", False):
-                qimg = qimg.transformed(QtGui.QTransform().rotate(90))
-            if hasattr(self, "mirrorToggle") and self.mirrorToggle.isChecked():
+        """웹캠 프레임을 미리보기에 표시하고, 다른 모듈용으로 BGR 프레임을 저장합니다."""
+        if isinstance(qimg, QtG.QImage):
+            if self.rotate90:
+                qimg = qimg.transformed(QtG.QTransform().rotate(90))
+            if self.mirrorToggle.isChecked():
                 qimg = qimg.mirrored(True, False)
 
-            pix = QtGui.QPixmap.fromImage(qimg).scaled(
+            pix = QtG.QPixmap.fromImage(qimg).scaled(
                 self.cameraView.size(),
-                QtCore.Qt.KeepAspectRatioByExpanding,
-                QtCore.Qt.SmoothTransformation
+                QtC.Qt.KeepAspectRatioByExpanding,
+                QtC.Qt.SmoothTransformation
             )
             self.cameraView.setPixmap(pix)
 
+            # ✅ 여기서도 parent.webcam_last_frame 채워주기 (QImage만 주입되는 경우 대비)
+            try:
+                qimg_rgb = qimg.convertToFormat(QtG.QImage.Format_RGB888)
+                w, h = qimg_rgb.width(), qimg_rgb.height()
+                ptr = qimg_rgb.bits(); ptr.setsize(h * w * 3)
+                rgb = np.frombuffer(ptr, np.uint8).reshape((h, w, 3))
+                bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+                parent = self.parent() or self.window()
+                if parent is not None:
+                    setattr(parent, "webcam_last_frame", bgr)
+            except Exception:
+                pass
 
-
-    # ----- 데모 데이터 -----
-    def _collect_face_conditions(self):
-        parent = self.window()
-        if not parent: return {}
-        number = getattr(parent, "user_tone", None)
-        try: number = int(number) if number is not None else None
-        except: number = None
-        return {
-            "skin_type":      getattr(parent, "user_skin_type", None),
-            "personal_color": getattr(parent, "user_color", None),
-            "number":         number,
-        }
-
-
-    def _load_face_recommendations_safe(self):
+    def _load_face_recommendations_safe(self, skin_type=None, personal_color=None, number=None):
         """
         CSV에서 추천 로드. 실패/예외일 때만 최소 백업(타입별 몇 개) 사용.
         '데모 하드코딩'은 사용하지 않는다.
         """
         try:
-            cond = self._collect_face_conditions()
+            cond = {"skin_type": skin_type, "personal_color": personal_color, "number": number}
             # 디버깅: cond 확인
             print("[RECO] cond =", cond)
 
@@ -1124,7 +1184,7 @@ class CaptureUnifiedView(QtW.QWidget):
             # 전부 비었으면: 타입 기준 백업만 (CSV에서) 시도
             if not any(len(v) for v in recos.values()):
                 print("[RECO] primary empty -> using type-only backup from CSV")
-                recos = self._fetch_recos_by_category({"skin_type": None, "personal_color": None, "number": None})
+                recos = self._fetch_recos_by_category({})
 
             # 그래도 비면 그냥 빈 그대로 반환 (데모 금지)
             return recos, (tips or [])
@@ -1134,16 +1194,12 @@ class CaptureUnifiedView(QtW.QWidget):
             # 진짜 실패(파일 깨짐 등)일 때만 아주 최소 백업
             return {"파데": [], "쿠션": [], "립": [], "아이": []}, (tips if 'tips' in locals() else [])
 
-
-
     def _fetch_recos_by_category(self, cond):
         """
         final.csv에서 카테고리별 추천 로드.
         필터: skin_types / personal_colors / number
         CSV 위치: 프로젝트 루트(main.py 옆) 또는 data/ 폴더
         """
-        import os, csv
-
         recos = {"파데": [], "쿠션": [], "립": [], "아이": []}
 
         # --- CSV 경로: 루트 최우선, 없으면 data/ ---
@@ -1211,10 +1267,6 @@ class CaptureUnifiedView(QtW.QWidget):
             recos[k] = recos[k][:10]
         return recos
 
-
-
-
-
     def _load_makeup_tips_csv(self, cond):
         """
         현재 final.csv에는 화장법/유튜브 데이터가 없으므로,
@@ -1224,27 +1276,3 @@ class CaptureUnifiedView(QtW.QWidget):
             {"title": "속광 표현 팁", "thumb": "", "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
             {"title": "데일리 음영 메이크업", "thumb": "", "url": "https://www.youtube.com/watch?v=ysz5S6PUM-U"},
         ]
-
-
-    def _inject_demo_data(self):
-        demo = {
-            "파데": [
-                {"name": "프레시 파운데이션 21", "price": 32000, "desc": "가벼운 커버", "img": ""},
-                {"name": "롱웨어 파운데이션 22", "price": 38000, "desc": "지속력 강화", "img": ""},
-            ],
-            "쿠션": [
-                {"name": "광채 쿠션 20", "price": 42000, "desc": "촉촉 글로우", "img": ""},
-                {"name": "보송 쿠션 21", "price": 39000, "desc": "픽싱 보송", "img": ""},
-            ],
-            "립": [
-                {"name": "벨벳 립 04", "price": 19000, "desc": "부드러운 발림", "img": ""},
-            ],
-            "아이": [
-                {"name": "뉴트럴 팔레트", "price": 29000, "desc": "데일리 음영", "img": ""},
-            ],
-        }
-        tips = [
-            {"title": "여쿨 메이크업 베이스", "thumb": "", "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
-            {"title": "속광 표현 팁", "thumb": "", "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"},
-        ]
-        self.rightPanel.pageReco.set_data(demo, tips)
